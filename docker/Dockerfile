@@ -152,8 +152,6 @@ EOF
 RUN <<'EOF'
 #!/bin/bash
 source /opt/lofar/docker-build-env.sh
-uv tool install --python $SYSPYTHON shadems --with "pyarrow,dask<2025"
-uv tool install --python $SYSPYTHON lofar-vlbi-plot --with "python-casacore"
 uv tool install --python $SYSPYTHON breizorro
 uv venv --seed --python $SYSPYTHON $INSTALLDIR/pyenv-py3
 # Without this the environment doesn't load when sourced from sh.
@@ -286,6 +284,17 @@ RUN <<'EOF'
 #!/bin/bash
 source /opt/lofar/docker-build-env.sh
 uv pip install --no-deps --no-binary python-casacore "python-casacore==${PYTHON_CASACORE_VERSION}"
+EOF
+
+#
+# uv tools that need python-casacore. PyPI has no linux/aarch64 wheels for it,
+# so these build it from source against the casacore above (hence this spot).
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+uv tool install --python $SYSPYTHON shadems --with "pyarrow,dask<2025"
+uv tool install --python $SYSPYTHON lofar-vlbi-plot --with "python-casacore"
 EOF
 
 #
