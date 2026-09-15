@@ -266,6 +266,45 @@ EOF
 ENV UV_FIND_LINKS=/opt/wheels \
     UV_CONSTRAINT=/opt/wheels/constraints.txt
 
+#
+# PyBDSF, before requirements.txt (which pulls it in and installs with
+# --no-build-isolation, so bdsf's build backend scikit-build would be missing).
+# A normal isolated build fetches its own build tools.
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+uv pip install bdsf
+python -c "import bdsf"
+EOF
+
+#
+# PyQt5 (for lofar-h5plot). PyPI has no linux/aarch64 wheels for PyQt5,
+# PyQt5-sip or PyQt5-Qt5, so build PyQt5 and PyQt5-sip against Fedora's Qt5.
+# PyQt5-Qt5 (the bundled Qt) is not needed then, and is removed from the
+# dependency tree with a uv override. Without all this uv falls back to
+# PyQt5 5.15.2, the last release that doesn't require PyQt5-Qt5.
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+dnf -y install qt5-qtbase-devel
+dnf -y clean all
+PYQT5_VERSION=5.15.11
+pip wheel --no-deps --wheel-dir /opt/wheels "PyQt5-sip>=12.15,<13"
+pip wheel --no-deps --wheel-dir /opt/wheels \
+    --config-settings --confirm-license= \
+    --config-settings --qmake=/usr/bin/qmake-qt5 \
+    --verbose \
+    "PyQt5==${PYQT5_VERSION}"
+echo "PyQt5==${PYQT5_VERSION}" >> /opt/wheels/constraints.txt
+echo "PyQt5-Qt5 ; sys_platform == 'never'" > /opt/wheels/overrides.txt
+uv pip install --override /opt/wheels/overrides.txt PyQt5
+python -c "from PyQt5 import QtCore; print(QtCore.PYQT_VERSION_STR)"
+EOF
+
+ENV UV_OVERRIDE=/opt/wheels/overrides.txt
+
 RUN <<'EOF'
 #!/bin/bash
 source /opt/lofar/docker-build-env.sh
@@ -293,15 +332,6 @@ wget --progress=bar:force:noscroll https://lta.lofar.eu/software/lofar_lta-2.8.0
 tar xf lofar_lta-2.8.0.tar.gz
 uv pip install ./lofar_lta-2.8.0
 rm -rf lofar_lta-2.8.0.tar.gz lofar_lta-2.8.0/
-EOF
-
-#
-# PyBDSF
-#
-RUN <<'EOF'
-#!/bin/bash
-source /opt/lofar/docker-build-env.sh
-uv pip install bdsf
 EOF
 
 #
