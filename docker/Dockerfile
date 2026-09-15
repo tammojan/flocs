@@ -470,11 +470,36 @@ git clone https://git.astron.nl/RD/DP3.git $INSTALLDIR/DP3/src
 cd $INSTALLDIR/DP3/src
 git checkout ${DP3_VERSION}
 echo export DP3_VERSION=$(git rev-parse --short HEAD) >> $INSTALLDIR/init.sh
+# The bundled 'predict' checks TARGET_CPU but then compiles with
+# -march=native;-mavx2: an x86-only flag, and the build host's CPU (which may
+# not run on an M1). Drop -mavx2 and use TARGET_CPU instead of native.
+git submodule update --init --recursive
+PREDICT_CPU_CMAKE=external/predict/cmake/SetTargetCPU.cmake
+sed -i -e 's/;-mavx2//g' -e 's/-march=native/-march=${TARGET_CPU}/g' $PREDICT_CPU_CMAKE
+grep -n 'march' $PREDICT_CPU_CMAKE
+if grep -q -E -- '-mavx2|-march=native' $PREDICT_CPU_CMAKE; then
+    echo "predict still uses -mavx2 or -march=native" >&2; exit 1
+fi
+# predict also dispatches to xsimd::neon (32-bit ARM, no double-precision
+# SIMD). xsimd enables that arch on aarch64 too, which breaks the build
+# ("compatible sizes"). Keep only neon64, as newer predict versions do.
+PREDICT_ARCHS=external/predict/include/predict/XSimdArchitectures.h
+sed -i -e 's/xsimd::neon64,/xsimd::neon64/' -e '/xsimd::neon[[:space:]]*\/\/ ARM32/d' $PREDICT_ARCHS
+cat $PREDICT_ARCHS
+if grep -q -E 'xsimd::neon([^0-9]|$)' $PREDICT_ARCHS; then
+    echo "predict still dispatches to xsimd::neon" >&2; exit 1
+fi
+# predict includes the x86-only <immintrin.h> without using it; include it on
+# x86 only.
+grep -rl --include='*.cpp' --include='*.h' '^#include <immintrin.h>' external/predict \
+    | xargs -r sed -i 's|^#include <immintrin.h>|#if defined(__x86_64__) \|\| defined(__i386__)\n#include <immintrin.h>\n#endif|'
+grep -rn -B1 -A1 --include='*.cpp' --include='*.h' 'immintrin.h' external/predict || true
 cd $INSTALLDIR/DP3/build
 cmake $CMAKE_ADD_OPTION -DCMAKE_INSTALL_PREFIX:PATH=$INSTALLDIR/DP3 \
     -DIDGAPI_LIBRARIES=$INSTALLDIR/idg/lib/libidg-api.so -DIDGAPI_INCLUDE_DIRS=$INSTALLDIR/idg/include \
     -DAOFLAGGER_INCLUDE_DIR=$INSTALLDIR/aoflagger/include -DAOFLAGGER_LIB=$INSTALLDIR/aoflagger/lib/libaoflagger.so \
     -DTARGET_CPU=${MARCH} -DLIBDIRAC_PREFIX=$INSTALLDIR/sagecal/ -DMETADATA_COMPRESSION_DEFAULT=True \
+    -DGIT_SUBMODULE=OFF \
     ../src
 make -s -j $J
 make install
