@@ -317,7 +317,13 @@ RUN <<'EOF'
 source /opt/lofar/docker-build-env.sh
 # --no-build-isolation: build backends like scikit-build-core can't fetch ninja themselves.
 uv pip install ninja
-cat $INSTALLDIR/flocs/requirements.txt | xargs -n 1 uv pip install --no-build-isolation
+# everybeam has no aarch64 wheels on PyPI; the Python module comes from our own
+# EveryBeam build (on PYTHONPATH via init.sh). Drop it as a pip dependency
+# for this and all later installs.
+echo "everybeam ; sys_platform == 'never'" >> /opt/wheels/overrides.txt
+# lsmtool needs everybeam: installed separately after the EveryBeam step.
+grep -v -i -x -E '[[:space:]]*lsmtool[[:space:]]*' $INSTALLDIR/flocs/requirements.txt \
+    | xargs -n 1 uv pip install --no-build-isolation
 EOF
 
 RUN <<'EOF'
@@ -423,6 +429,17 @@ cmake $CMAKE_ADD_OPTION -DCMAKE_INSTALL_PREFIX=$INSTALLDIR/EveryBeam -DBUILD_WIT
 make -j $J
 make install
 rm -rf $INSTALLDIR/EveryBeam/src $INSTALLDIR/EveryBeam/build
+EOF
+
+#
+# lsmtool (needs EveryBeam, built above; not taken from PyPI, see overrides.txt)
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+uv pip install lsmtool
+EB_PYDIR=$(dirname "$(find $INSTALLDIR/EveryBeam -name 'everybeam*.so' | head -n 1)")
+PYTHONPATH=$EB_PYDIR python -c "import everybeam, lsmtool; print(everybeam.__file__, lsmtool.__file__)"
 EOF
 
 #
