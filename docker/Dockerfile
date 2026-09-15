@@ -284,20 +284,27 @@ EOF
 # PyQt5-Qt5 (the bundled Qt) is not needed then, and is removed from the
 # dependency tree with a uv override. Without all this uv falls back to
 # PyQt5 5.15.2, the last release that doesn't require PyQt5-Qt5.
+# No version pin: this builds the latest PyQt5, and uv then picks that wheel.
 #
 RUN <<'EOF'
 #!/bin/bash
 source /opt/lofar/docker-build-env.sh
 dnf -y install qt5-qtbase-devel
 dnf -y clean all
-PYQT5_VERSION=5.15.11
-pip wheel --no-deps --wheel-dir /opt/wheels "PyQt5-sip>=12.15,<13"
-pip wheel --no-deps --wheel-dir /opt/wheels \
+# sip 6.16.1 can't build PyQt5 ("ABI v12 is being targeted but the
+# PyQt5.QtCore module doesn't support it", Python-SIP/sip#114).
+# --build-constraint caps sip in pip's isolated build environment
+# (recent pip no longer applies plain -c / PIP_CONSTRAINT there).
+pip --version
+echo "sip<6.16" > /tmp/build-constraints.txt
+pip wheel --no-deps --wheel-dir /opt/wheels --build-constraint /tmp/build-constraints.txt \
+    "PyQt5-sip>=12.15,<13"
+pip wheel --no-deps --wheel-dir /opt/wheels --build-constraint /tmp/build-constraints.txt \
     --config-settings --confirm-license= \
     --config-settings --qmake=/usr/bin/qmake-qt5 \
     --verbose \
-    "PyQt5==${PYQT5_VERSION}"
-echo "PyQt5==${PYQT5_VERSION}" >> /opt/wheels/constraints.txt
+    PyQt5
+rm /tmp/build-constraints.txt
 echo "PyQt5-Qt5 ; sys_platform == 'never'" > /opt/wheels/overrides.txt
 uv pip install --override /opt/wheels/overrides.txt PyQt5
 python -c "from PyQt5 import QtCore; print(QtCore.PYQT_VERSION_STR)"
