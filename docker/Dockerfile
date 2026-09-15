@@ -192,21 +192,6 @@ uv pip install --no-binary pandas pandas
 uv pip install --no-binary h5py h5py
 EOF
 
-RUN <<'EOF'
-#!/bin/bash
-source /opt/lofar/docker-build-env.sh
-cat $INSTALLDIR/flocs/requirements.txt | xargs -n 1 uv pip install --no-build-isolation
-EOF
-
-RUN <<'EOF'
-#!/bin/bash
-source /opt/lofar/docker-build-env.sh
-# Install facetselfcal this way to make sure data gets installed.
-git clone https://github.com/rvweeren/lofar_facet_selfcal.git
-uv pip install ./lofar_facet_selfcal
-uv pip install ./flocs
-EOF
-
 #
 # Boost (built here so Boost.Python/NumPy match the venv)
 #
@@ -223,27 +208,6 @@ cd boost_1_89_0
     linkflags="$(python${PYTHON_VERSION}-config --libs)" install
 cd $INSTALLDIR
 rm -rf boost_1_89_0.tar.gz boost_1_89_0
-EOF
-
-#
-# LTA client
-#
-RUN <<'EOF'
-#!/bin/bash
-source /opt/lofar/docker-build-env.sh
-wget --progress=bar:force:noscroll https://lta.lofar.eu/software/lofar_lta-2.8.0.tar.gz
-tar xf lofar_lta-2.8.0.tar.gz
-uv pip install ./lofar_lta-2.8.0
-rm -rf lofar_lta-2.8.0.tar.gz lofar_lta-2.8.0/
-EOF
-
-#
-# PyBDSF
-#
-RUN <<'EOF'
-#!/bin/bash
-source /opt/lofar/docker-build-env.sh
-uv pip install bdsf
 EOF
 
 #
@@ -278,17 +242,71 @@ rm -rf $INSTALLDIR/casacore/build $INSTALLDIR/casacore/src
 EOF
 
 #
-# python-casacore, built against the casacore above
+# python-casacore, built once against the casacore above and installed into the
+# venv. The wheel stays in /opt/wheels so requirements.txt and the uv tools reuse
+# this exact version instead of building their own (PyPI has no aarch64 wheels).
 #
 RUN <<'EOF'
 #!/bin/bash
 source /opt/lofar/docker-build-env.sh
-uv pip install --no-deps --no-binary python-casacore "python-casacore==${PYTHON_CASACORE_VERSION}"
+# dask-ms (shadems, requirements.txt) needs python-casacore >= 3.7.
+python -c "import sys; v=tuple(map(int,'${PYTHON_CASACORE_VERSION}'.split('.')[:2])); sys.exit(v < (3, 7))"
+mkdir -p /opt/wheels /tmp/sdist
+pip download --no-deps --no-binary :all: --dest /tmp/sdist "python-casacore==${PYTHON_CASACORE_VERSION}"
+# scikit-build-core passes CMAKE_ARGS on to cmake.
+CMAKE_ARGS="-DCASACORE_ROOT_DIR=${INSTALLDIR}/casacore" \
+    uv build --wheel --no-config --python $SYSPYTHON --out-dir /opt/wheels /tmp/sdist/python_casacore-${PYTHON_CASACORE_VERSION}.tar.gz
+rm -rf /tmp/sdist
+echo "python-casacore==${PYTHON_CASACORE_VERSION}" > /opt/wheels/constraints.txt
+uv pip install --no-deps --no-index /opt/wheels/python_casacore-${PYTHON_CASACORE_VERSION}-*.whl
+python -c "import casacore.tables; print(casacore.__version__)"
+EOF
+
+# From here on uv only ever uses the wheel above for python-casacore.
+ENV UV_FIND_LINKS=/opt/wheels \
+    UV_CONSTRAINT=/opt/wheels/constraints.txt
+
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+# --no-build-isolation: build backends like scikit-build-core can't fetch ninja themselves.
+uv pip install ninja
+cat $INSTALLDIR/flocs/requirements.txt | xargs -n 1 uv pip install --no-build-isolation
+EOF
+
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+# Install facetselfcal this way to make sure data gets installed.
+git clone https://github.com/rvweeren/lofar_facet_selfcal.git
+uv pip install ./lofar_facet_selfcal
+uv pip install ./flocs
 EOF
 
 #
-# uv tools that need python-casacore. PyPI has no linux/aarch64 wheels for it,
-# so these build it from source against the casacore above (hence this spot).
+# LTA client
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+wget --progress=bar:force:noscroll https://lta.lofar.eu/software/lofar_lta-2.8.0.tar.gz
+tar xf lofar_lta-2.8.0.tar.gz
+uv pip install ./lofar_lta-2.8.0
+rm -rf lofar_lta-2.8.0.tar.gz lofar_lta-2.8.0/
+EOF
+
+#
+# PyBDSF
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+uv pip install bdsf
+EOF
+
+#
+# uv tools that need python-casacore. They get the python-casacore wheel from
+# /opt/wheels through UV_FIND_LINKS.
 #
 RUN <<'EOF'
 #!/bin/bash
