@@ -104,7 +104,8 @@ cmake $CMAKE_ADD_OPTION -DCMAKE_INSTALL_PREFIX=/opt/OpenBLAS -DBUILD_TESTING=OFF
 make -j$J
 make install
 rm -rf /opt/OpenBLAS/src
-nm -D /opt/OpenBLAS/lib64/libopenblas.so | grep -q sbgemm_
+# No grep -q: it exits on the first match, nm gets SIGPIPE and pipefail fails the step.
+nm -D --defined-only /opt/OpenBLAS/lib64/libopenblas.so | grep sbgemm_
 flexiblas add OPENBLAS /opt/OpenBLAS/lib64/libopenblas.so
 EOF
 
@@ -157,7 +158,7 @@ uv tool install --python $SYSPYTHON breizorro
 uv venv --seed --python $SYSPYTHON $INSTALLDIR/pyenv-py3
 # Without this the environment doesn't load when sourced from sh.
 sed -i "29,41d" $INSTALLDIR/pyenv-py3/bin/activate
-$INSTALLDIR/pyenv-py3/bin/python --version | grep -q "Python ${PYTHON_VERSION}"
+$INSTALLDIR/pyenv-py3/bin/python --version | grep "Python ${PYTHON_VERSION}"
 EOF
 
 RUN <<'EOF'
