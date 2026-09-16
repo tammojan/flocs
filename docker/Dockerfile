@@ -640,10 +640,11 @@ cat /opt/wheels/constraints.txt > /tmp/constraints-extra.txt
 uv pip freeze | grep -i '^numpy==' >> /tmp/constraints-extra.txt
 cat /tmp/constraints-extra.txt
 uv pip install --constraint /tmp/constraints-extra.txt \
-    drms glymur lofarsun zeep RMextract cytoolz \
+    drms glymur lofarsun zeep RMextract cytoolz opencv-python-headless jupyterlab \
     git+https://github.com/jurjen93/lofar_helpers.git
 rm /tmp/constraints-extra.txt
-python -c "import drms, glymur, lofarSun, zeep, h5_helpers, RMextract, cytoolz; print('extra packages OK')"
+python -c "import drms, glymur, lofarSun, zeep, h5_helpers, RMextract, cytoolz, cv2, jupyterlab; print('extra packages OK')"
+jupyter lab --version
 EOF
 
 #
