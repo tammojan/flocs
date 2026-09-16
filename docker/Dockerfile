@@ -581,7 +581,7 @@ rm -rf $INSTALLDIR/LOFARBeam
 EOF
 
 #
-# DDFacet, killMS, DynSpecMS
+# DDFacet, DynSpecMS (killMS left out: not needed here and doesn't build)
 #
 RUN <<'EOF'
 #!/bin/bash
@@ -589,13 +589,6 @@ source /opt/lofar/docker-build-env.sh
 git clone --single-branch -b v1.0.0.0 https://github.com/saopicc/DDFacet.git
 sed -i '669s/None:/None and weights is not 1:/' DDFacet/DDFacet/Data/ClassVisServer.py
 uv pip install --no-deps DDFacet/
-
-#git clone --single-branch -b v3.3.0 https://github.com/saopicc/killMS.git
-#sed -i '558s/$/ parent_affinity=GDPredict["Parallel"]["MainProcessAffinity"],/' killMS/killMS/kMS.py
-#for f in SmoothSols.py InterpSols.py Weights/W_Imag.py Weights/W_TimeCov.py Weights/W_ImagCov.py; do
-#    sed -i 's/affinity=0/affinity=0, parent_affinity="disable"/' killMS/killMS/$f
-#done
-#uv pip install --no-deps killMS/
 
 git clone https://github.com/cyriltasse/DynSpecMS.git
 cd DynSpecMS && git checkout ApplyBeam
@@ -619,7 +612,7 @@ cd DDFCatalogues
 for c in VLSS wenss B2 NVSS; do
     wget --progress=bar:force:noscroll https://www.extragalactic.info/bootstrap/$c.fits
 done
-#wget --progress=bar:force:noscroll https://tgssadr.strw.leidenuniv.nl/catalogs/TGSSADR1_7sigma_catalog.fits
+wget --progress=bar:force:noscroll https://tgssadr.strw.leidenuniv.nl/catalogs/TGSSADR1_7sigma_catalog.fits
 EOF
 
 #
@@ -635,6 +628,35 @@ git clone https://git.astron.nl/RD/VLBI-cwl.git
 EOF
 
 #
+# Extra Python packages, not in upstream flocs. Kept near the end so changing
+# them doesn't rebuild the compiled software.
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+# lofarSun has a history of downgrading numpy: keep the installed numpy, in
+# addition to the existing constraints (python-casacore).
+cat /opt/wheels/constraints.txt > /tmp/constraints-extra.txt
+uv pip freeze | grep -i '^numpy==' >> /tmp/constraints-extra.txt
+cat /tmp/constraints-extra.txt
+uv pip install --constraint /tmp/constraints-extra.txt \
+    drms glymur lofarsun zeep RMextract cytoolz \
+    git+https://github.com/jurjen93/lofar_helpers.git
+rm /tmp/constraints-extra.txt
+python -c "import drms, glymur, lofarSun, zeep, h5_helpers, RMextract, cytoolz; print('extra packages OK')"
+EOF
+
+#
+# LiLF (plain checkout; PATH and PYTHONPATH are set in init.sh below)
+#
+RUN <<'EOF'
+#!/bin/bash
+source /opt/lofar/docker-build-env.sh
+git clone https://github.com/revoltek/LiLF.git $INSTALLDIR/LiLF
+git -C $INSTALLDIR/LiLF log -1 --format='LiLF %h %cd'
+EOF
+
+#
 # init.sh and cleanup
 #
 RUN <<'EOF'
@@ -643,6 +665,8 @@ source /opt/lofar/docker-build-env.sh
 mv flocs/utility .
 ln -s $INSTALLDIR/pyenv-py3/bin/h5plot /usr/bin/h5plot
 bash $INSTALLDIR/flocs/construct_init.sh
+echo export PYTHONPATH=\$INSTALLDIR/LiLF:\$PYTHONPATH >> $INSTALLDIR/init.sh
+echo export PATH=\$INSTALLDIR/LiLF/scripts:\$PATH >> $INSTALLDIR/init.sh
 echo . \$INSTALLDIR/pyenv-py3/bin/activate >> $INSTALLDIR/init.sh
 rm -rf flocs lofar_facet_selfcal
 uv cache clean
