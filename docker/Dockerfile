@@ -590,12 +590,12 @@ git clone --single-branch -b v1.0.0.0 https://github.com/saopicc/DDFacet.git
 sed -i '669s/None:/None and weights is not 1:/' DDFacet/DDFacet/Data/ClassVisServer.py
 uv pip install --no-deps DDFacet/
 
-git clone --single-branch -b v3.3.0 https://github.com/saopicc/killMS.git
-sed -i '558s/$/ parent_affinity=GDPredict["Parallel"]["MainProcessAffinity"],/' killMS/killMS/kMS.py
-for f in SmoothSols.py InterpSols.py Weights/W_Imag.py Weights/W_TimeCov.py Weights/W_ImagCov.py; do
-    sed -i 's/affinity=0/affinity=0, parent_affinity="disable"/' killMS/killMS/$f
-done
-uv pip install --no-deps killMS/
+#git clone --single-branch -b v3.3.0 https://github.com/saopicc/killMS.git
+#sed -i '558s/$/ parent_affinity=GDPredict["Parallel"]["MainProcessAffinity"],/' killMS/killMS/kMS.py
+#for f in SmoothSols.py InterpSols.py Weights/W_Imag.py Weights/W_TimeCov.py Weights/W_ImagCov.py; do
+#    sed -i 's/affinity=0/affinity=0, parent_affinity="disable"/' killMS/killMS/$f
+#done
+#uv pip install --no-deps killMS/
 
 git clone https://github.com/cyriltasse/DynSpecMS.git
 cd DynSpecMS && git checkout ApplyBeam
@@ -619,7 +619,7 @@ cd DDFCatalogues
 for c in VLSS wenss B2 NVSS; do
     wget --progress=bar:force:noscroll https://www.extragalactic.info/bootstrap/$c.fits
 done
-wget --progress=bar:force:noscroll https://tgssadr.strw.leidenuniv.nl/catalogs/TGSSADR1_7sigma_catalog.fits
+#wget --progress=bar:force:noscroll https://tgssadr.strw.leidenuniv.nl/catalogs/TGSSADR1_7sigma_catalog.fits
 EOF
 
 #
